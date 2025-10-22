@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARFAA School - Official Website</title>
+    <!-- Tailwind CSS کو لوڈ کریں -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* VIP Theme Styles */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f8fc; 
+        }
+        .header-bg {
+            background-color: #1a202c; 
+        }
+        .main-accent {
+            color: #FFC300; 
+        }
+        .btn-primary {
+            background-color: #FFC300;
+            color: #1a202c;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        .btn-primary:hover:not(:disabled) {
+            background-color: #e6b200;
+            box-shadow: 0 10px 15px -3px rgba(255, 195, 0, 0.5), 0 4px 6px -2px rgba(255, 195, 0, 0.05);
+        }
+        .form-input:focus {
+            border-color: #FFC300;
+            box-shadow: 0 0 0 3px rgba(255, 195, 0, 0.5);
+        }
+        .mobile-nav {
+            box-shadow: 0 -5px 15px rgba(0, 0, 0, 0.2);
+        }
+        /* Loading spinner animation */
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen">
+
+    <!-- Header / Navigation Bar (Desktop) -->
+    <header class="header-bg shadow-xl sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div id="logo-click" class="text-2xl font-extrabold main-accent cursor-pointer">
+                    ARFAA School
+                </div>
+                <!-- Desktop Navigation Buttons will be inserted here by JavaScript -->
+                <nav class="hidden md:flex space-x-4" id="desktop-nav"></nav>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area (Pages will be rendered here) -->
+    <main id="main-content" class="flex-grow p-4 sm:p-6 pb-20"></main>
+
+    <!-- Mobile Fixed Footer Navigation -->
+    <footer class="fixed bottom-0 left-0 w-full header-bg border-t border-yellow-500 md:hidden z-20 mobile-nav">
+        <!-- Mobile Navigation Buttons will be inserted here by JavaScript -->
+        <nav class="flex justify-around items-center h-16" id="mobile-nav"></nav>
+    </footer>
+
+    <!-- Custom Modal Structure (for custom alerts/messages) -->
+    <div id="custom-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70 p-4">
+        <div id="modal-content" class="bg-white text-gray-900 rounded-xl shadow-2xl max-w-sm w-full p-6 transform transition-all">
+            <!-- Modal content will be inserted here by JavaScript -->
+        </div>
+    </div>
+
+    <!-- JavaScript Logic Section -->
+    <script type="module">
+        // Firebase SDK Imports
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // ====================================================================
+        // 1. GLOBAL VARIABLES & FIREBASE SETUP
+        // ====================================================================
+
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db = null;
+        let auth = null;
+        let userId = null;
+        let currentPage = 'home';
+        let isFirebaseActive = false;
+
+        const navItems = [
+            { name: 'Home', page: 'home', icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>' },
+            { name: 'Admission Form', page: 'admission', icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>' },
+            { name: 'Register Complaint', page: 'complaint', icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' },
+            { name: 'Contact', page: 'contact', icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L2 22l1.3-9.1A8.38 8.38 0 0 1 2.5 11.5a8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.2a8.5 8.5 0 0 1 7.6 4.7 8.38 8.38 0 0 1 .9 3.8z"/></svg>' },
+        ];
+
+        const showModal = (message, type = 'success') => {
+            const modal = document.getElementById('custom-modal');
+            const modalContent = document.getElementById('modal-content');
+            const bgColor = type === 'success' ? 'bg-green-600' : 'bg-red-600';
+            const title = type === 'success' ? 'Success!' : 'Error!';
+
+            modalContent.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <h3 class="text-xl font-bold ${bgColor} text-white px-3 py-1 rounded-lg">${title}</h3>
+                    <button 
+                        id="modal-close-btn"
+                        class="text-gray-500 hover:text-gray-900 text-2xl font-bold ml-2 transition duration-200"
+                        aria-label="Close"
+                    >
+                        &times;
+                    </button>
+                </div>
+                <p class="mt-4 text-md leading-relaxed">${message}</p>
+                <div class="mt-6 text-right">
+                    <button 
+                        id="modal-ok-btn" 
+                        class="px-4 py-2 ${bgColor} text-white font-semibold rounded-lg shadow-md hover:opacity-90 transition duration-200"
+                    >
+                        Understood
+                    </button>
+                </div>
+            `;
+            
+            const closeModal = () => modal.classList.add('hidden');
+            document.getElementById('modal-close-btn').onclick = closeModal;
+            document.getElementById('modal-ok-btn').onclick = closeModal;
+
+            modal.classList.remove('hidden');
+        };
+
+        const navigateTo = (pageName) => {
+            currentPage = pageName;
+            renderUI();
+        };
+
+        // ====================================================================
+        // 2. PAGE RENDERING LOGIC
+        // ====================================================================
+
+        const renderLoading = () => `
+            <div class="text-center p-12 text-lg main-accent font-semibold">
+                <svg class="animate-spin h-8 w-8 main-accent mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                Application Data Load Ho Raha Hai...
+            </div>
+        `;
+
+        const renderHomePage = () => {
+            const firebaseStatusClass = isFirebaseActive ? 'bg-green-100 text-green-700 border-green-400' : 'bg-red-100 text-red-700 border-red-400';
+            const firebaseStatusText = isFirebaseActive ? 'Online (Data save ho sakta hai)' : 'Offline (Forms submit nahi ho saken ge)';
+
+            return `
+                <div class="p-4 max-w-4xl mx-auto my-4">
+                    <div class="text-center p-8 bg-white rounded-xl shadow-2xl mt-4">
+                        <div class="p-6 border-4 border-yellow-500 rounded-3xl inline-block shadow-inner">
+                            <h1 class="text-6xl font-extrabold text-gray-900 mb-2">ARFAA</h1>
+                            <h2 class="text-2xl font-semibold text-gray-700 mb-6">SCIENCE SECONDARY SCHOOL MULTAN</h2>
+                            <p class="text-sm text-gray-500">Affiliated With B.I.S.E Multan</p>
+                        </div>
+                        
+                        <p class="mt-8 text-xl text-gray-700 leading-relaxed">
+                            Taaleemi shobay mein mayyar aur kamiyabi ka naam. Hamara maqsad talba ko scientific aur akhlaqi buniyadon par mazboot karna hai.
+                        </p>
+                        
+                        <div class="mt-10 grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div class="bg-gray-100 p-6 rounded-xl shadow-md transition transform hover:scale-[1.03] hover:shadow-xl duration-300">
+                                <h3 class="text-2xl font-bold text-yellow-600 mb-2">Curriculum</h3>
+                                <p class="text-gray-600">Jadeed scientific syllabus aur tajurbekar ustaad.</p>
+                            </div>
+                            <div class="bg-gray-100 p-6 rounded-xl shadow-md transition transform hover:scale-[1.03] hover:shadow-xl duration-300">
+                                <h3 class="text-2xl font-bold text-yellow-600 mb-2">Facilities</h3>
+                                <p class="text-gray-600">Aala science labs, library, aur sports ground.</p>
+                            </div>
+                            <div class="bg-gray-100 p-6 rounded-xl shadow-md transition transform hover:scale-[1.03] hover:shadow-xl duration-300">
+                                <h3 class="text-2xl font-bold text-yellow-600 mb-2">Our Promise</h3>
+                                <p class="text-gray-600">Har talib-e-ilm ki zaati salahiyaton ko nikhaarne ka wada.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-12 text-sm p-4 rounded-lg border ${firebaseStatusClass}">
+                            <p class="font-bold text-base">Application Status:</p>
+                            <p>Firebase Connection: <span class="font-semibold">${firebaseStatusText}</span></p>
+                            <p>Aapki ID: <span class="font-mono bg-gray-200 p-1 rounded text-xs text-black">${userId || 'Tyar Nahi'}</span></p>
+                        </div>
+
+                    </div>
+                </div>
+            `;
+        };
+        // ... (renderAdmissionForm, renderComplaintForm, renderContactPage functions remain the same)
+        const renderAdmissionForm = () => `
+            <div class="p-6 bg-white rounded-xl shadow-2xl max-w-4xl mx-auto my-8">
+                <h2 class="text-3xl font-extrabold text-gray-900 mb-6 border-b-2 border-yellow-500 pb-2">Admission Form</h2>
+                <p class="text-gray-600 mb-8">Naye session ke liye apni application jama karayen. Tamam fields zaroori hain.</p>
+                
+                <form id="admission-form" class="space-y-6">
+                    <div>
+                        <label for="studentName" class="block text-sm font-medium text-gray-700">Student Name<span class="text-red-500">*</span></label>
+                        <input type="text" id="studentName" name="studentName" required class="form-input mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm transition duration-200">
+                    </div>
+                    <div>
+                        <label for="fatherName" class="block text-sm font-medium text-gray-700">Father's Name<span class="text-red-500">*</span></label>
+                        <input type="text" id="fatherName" name="fatherName" required class="form-input mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm transition duration-200">
+                    </div>
+                    <div>
+                        <label for="class" class="block text-sm font-medium text-gray-700">Applying for Class<span class="text-red-500">*</span></label>
+                        <input type="text" id="class" name="class" required class="form-input mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm transition duration-200">
+                    </div>
+                    <div>
+                        <label for="phone" class="block text-sm font-medium text-gray-700">Phone Number<span class="text-red-500">*</span></label>
+                        <input type="tel" id="phone" name="phone" required class="form-input mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm transition duration-200">
+                    </div>
+                    <div>
+                        <label for="address" class="block text-sm font-medium text-gray-700">Residential Address<span class="text-red-500">*</span></label>
+                        <textarea id="address" name="address" required rows="3" class="form-input mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm transition duration-200"></textarea>
+                    </div>
+                    
+                    <button type="submit" id="admission-submit-btn" class="btn-primary w-full flex justify-center items-center py-3 px-4 rounded-lg shadow-lg text-lg disabled:opacity-50 transition duration-300">
+                        Submit Application
+                    </button>
+                </form>
+            </div>
+        `;
+
+        const renderComplaintForm = () => `
+            <div class="p-6 bg-white rounded-xl shadow-2xl max-w-4xl mx-auto my-8">
+                <h2 class="text-3xl font-extrabold text-gray-900 mb-6 border-b-2 border-yellow-500 pb-2">Register Complaint</h2>
+                <p class="text-gray-600 mb-8">Barah-e-meherbani kisi bhi masle ya feedback ki tafseelat darj karain. Aapki shanakht raaz reh sakti hai.</p>
+                
+                <form id="complaint-form" class="space-y-6">
+                    <div>
+                        <label for="subject" class="block text-sm font-medium text-gray-700">Subject / Title<span class="text-red-500">*</span></label>
+                        <input type="text" id="subject" name="subject" required class="form-input mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm transition duration-200">
+                    </div>
+
+                    <div>
+                        <label for="details" class="block text-sm font-medium text-gray-700">Details<span class="text-red-500">*</span></label>
+                        <textarea id="details" name="details" required rows="5" class="form-input mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm transition duration-200"></textarea>
+                    </div>
+
+                    <div>
+                        <label for="complainantName" class="block text-sm font-medium text-gray-700">Name (Optional)</label>
+                        <input type="text" id="complainantName" name="complainantName" class="form-input mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm transition duration-200">
+                    </div>
+
+                    <div>
+                        <label for="complainantContact" class="block text-sm font-medium text-gray-700">Contact Number or Email (Optional)</label>
+                        <input type="text" id="complainantContact" name="complainantContact" class="form-input mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm transition duration-200">
+                    </div>
+                    
+                    <button type="submit" id="complaint-submit-btn" class="btn-primary w-full flex justify-center items-center py-3 px-4 rounded-lg shadow-lg text-lg disabled:opacity-50 transition duration-300">
+                        Register Complaint
+                    </button>
+                </form>
+            </div>
+        `;
+
+        const renderContactPage = () => {
+            const phoneNumbers = [
+                "061-6774885", 
+                "0301-8774855", 
+                "0301-8737167", 
+                "0313-8737164"
+            ];
+            const branchInfo = [
+                { name: "Branch 01", address: "19-S1 Mushtaq Colony, Masoom Shah Road, Multan" },
+                { name: "Branch 02", address: "17-S1 Mushtaq Colony, Masoom Shah Road, Multan" },
+                { name: "Branch 03", address: "Bashir Abad, Multan" },
+            ];
+
+            const phoneIcon = '<svg class="w-6 h-6 mr-3 text-yellow-600" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 3.08 2h3a2 2 0 0 1 2 1.72 17.5 17.5 0 0 0 .81 2.81c.14.31.25.65.25 1a2 2 0 0 1-.45 1.72l-2 2a19.09 19.09 0 0 0 3.25 3.25l2-2a2 2 0 0 1 1.72-.45c.34 0 .68.11 1 .25a17.5 17.5 0 0 0 2.81.81A2 2 0 0 1 22 16.92z"/></svg>';
+            const homeIcon = '<svg class="w-6 h-6 mr-3 text-yellow-600" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>';
+            const messageIcon = '<svg class="w-6 h-6 mr-3 text-yellow-600" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L2 22l1.3-9.1A8.38 8.38 0 0 1 2.5 11.5a8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.2a8.5 8.5 0 0 1 7.6 4.7 8.38 8.38 0 0 1 .9 3.8z"/></svg>';
+
+
+            return `
+                <div class="p-6 bg-white rounded-xl shadow-2xl max-w-4xl mx-auto my-8">
+                    <h2 class="text-3xl font-extrabold text-gray-900 mb-6 border-b-2 border-yellow-500 pb-2">Contact & Messaging</h2>
+                    <p class="text-gray-600 mb-8">Mazeed maloomat ke liye aap in zaryon se rabta kar sakte hain.</p>
+                    
+                    <!-- Phone Numbers Section -->
+                    <div class="mb-8 p-4 border border-yellow-200 rounded-lg bg-yellow-50">
+                        <h3 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+                            ${phoneIcon}
+                            Phone Numbers
+                        </h3>
+                        <div class="space-y-2">
+                            ${phoneNumbers.map((number) => `
+                                <div class="flex items-center text-lg text-gray-800">
+                                    <span class="text-yellow-600 font-semibold w-8">📞</span>
+                                    <a href="tel:${number}" class="hover:text-yellow-700 transition duration-200">${number}</a>
+                                </div>
+            
